@@ -9,3 +9,8 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+homicide_df = read_csv(file = "./data/homicide-data copy.csv")
+
+
+```
