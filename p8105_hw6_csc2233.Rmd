@@ -7,10 +7,68 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+set.seed(1)
 ```
+
+# Question 2
 
 ```{r}
 homicide_df = read_csv(file = "./data/homicide-data copy.csv")
+bad = c("Albuquerque, NM", "Dallas, TX", "Phoenix, AZ",
+        "Kansas City, MO", "Tulsa, AL")
+homicide_df = homicide_df %>%
+  mutate(city_state = paste(city, state, sep = ", "),
+         victim_age = as.numeric(victim_age),
+         resolved = as.numeric(disposition == "Closed by arrest")) %>%
+  filter(!city_state %in% bad) %>%
+  filter(victim_race %in% c("Black", "White")) %>%
+  drop_na()
+
+bmore = homicide_df %>%
+  filter(city_state == "Baltimore, MD")
+
+fit_logistic = bmore |>
+  glm(resolved ~ victim_age + victim_race + victim_sex,
+      data = _, family = binomial())
+fit_logistic |> 
+  broom::tidy(conf.int = TRUE) |> 
+  mutate(OR = exp(estimate)) |>
+  select(term, log_OR = estimate, conf.low, conf.high)
+
+glm_function = function(x) {
+    logis = glm(resolved ~ victim_age + victim_race + victim_sex,
+    data = x, family = binomial())
+    results = broom::tidy(logis, conf.int = TRUE)
+    results[, c("estimate", "conf.low", "conf.high")][4, ]
+}
+
+testing = homicide_df %>%
+  select(city_state, resolved, victim_age, victim_race, victim_sex)
+testing = split(testing, testing$city_state)
+testing = map(testing, select, -city_state)
+cities = map(testing, glm_function)
+ORs_df = do.call(rbind, cities)
+ORs_df = rownames_to_column(ORs_df)
+
+ggplot(ORs_df, aes(reorder(x = rowname, estimate), y = estimate)) +
+  geom_col(fill = "white", color = "gray") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  coord_flip() +
+  labs(
+    title = "Estimated Odds Ratio Comparing Solving Male and Female Homicides",
+    y = "Odds Ratio",
+    x = "City and State"
+  ) +
+  theme_bw(base_size = 5)
+
+```
+
+In the majority of cities, male homicides are less likely to be resolved than female homicides. New York is the city with the lowest estimate of the odds ratio. Interestingly, the two cities with positive odds ratios (that are more than a smidge above zero) are both in the central valley of California. Many of the confidence intervals are very wide.
+
+# Question 3
+
+```{r}
 
 
 ```
