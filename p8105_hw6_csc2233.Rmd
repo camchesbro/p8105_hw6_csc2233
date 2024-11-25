@@ -69,6 +69,16 @@ In the majority of cities, male homicides are less likely to be resolved than fe
 # Question 3
 
 ```{r}
+birthweight_df = read_csv(file = "./data/birthweight.csv")
+birthweight_df = birthweight_df %>%
+  mutate(
+    babysex = as.factor(babysex),
+    frace = as.factor(frace),
+    mrace = as.factor(mrace),
+    malform = as.factor(malform)
+  ) %>%
+  drop_na()
+
 
 
 ```
