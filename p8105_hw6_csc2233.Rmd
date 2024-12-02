@@ -8,6 +8,8 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(modelr)
+library(mgcv)
 set.seed(1)
 ```
 
@@ -77,8 +79,66 @@ birthweight_df = birthweight_df %>%
     mrace = as.factor(mrace),
     malform = as.factor(malform)
   ) %>%
+  select(-c(pnumlbw, pnumsga)) %>%
+  mutate(low_age = momage < 15,
+         low_age = as.factor(as.numeric(low_age)),
+         mother_aa = mrace == 2,
+         mother_aa = as.factor(as.numeric(mother_aa))) %>%
   drop_na()
 
 
+propose_model = lm(bwt ~ gaweeks + low_age + mother_aa + smoken,
+                data = birthweight_df)
+summary(propose_model)
+propose_model2 = lm(bwt ~ gaweeks + mother_aa + smoken,
+                data = birthweight_df)
+summary(propose_model2)
+
+birthweight_df %>% 
+  modelr::add_residuals(propose_model) %>%
+  modelr::add_predictions(propose_model) %>%
+  ggplot(aes(x = pred, y = resid)) + geom_point()
+
+main_effects_model = lm(bwt ~ blength + gaweeks, data = birthweight_df)
+ints_model = lm(bwt ~ bhead + blength + babysex +
+                bhead*blength + bhead*babysex + blength*babysex +
+                bhead*blength*babysex,
+                data = birthweight_df)
+
+cv_df = crossv_mc(birthweight_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = cv_df %>% 
+  mutate(
+    propose_model  = map(train, \(df) lm(bwt ~ gaweeks + low_age + mother_aa + smoken,
+                                         data = df)),
+    main_effects_model = map(train, \(df) lm(bwt ~ blength + gaweeks,
+                                         data = df)),
+    ints_model  = map(train, \(df) lm(bwt ~ bhead + blength + babysex +
+                                    bhead*blength + bhead*babysex + blength*babysex +
+                                    bhead*blength*babysex,
+                                    data = as_tibble(df)))) %>% 
+    mutate(
+    rmse_propose = map2_dbl(propose_model, test,
+                           \(mod, df) rmse(model = mod, data = df)),
+    rmse_main = map2_dbl(main_effects_model, test,
+                           \(mod, df) rmse(model = mod, data = df)),
+    rmse_ints = map2_dbl(ints_model, test,
+                           \(mod, df) rmse(model = mod, data = df)))
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
 
 ```
+
+To construct a simple model I began by doing some brief research into what causes abnormal birthweights (https://www.chop.edu/conditions-diseases/low-birthweight). While age and race of the mother are already variables, in particular mothers under the age of 15 and african american mothers are at risk; to address this I coded a binary variable for if the mother is under 15, and a variable for if the mother is or is not african american. Because premature births and smoking are also causes, my model was constructed with those variables as well. Comparing my model to the two other models, my constructed model had signifigantly more error. Body length of the baby appears to be a strong predictor for birthweight. The strongest model appears to be the one with head circumference, length, and sex, as well as interactions. 
+
